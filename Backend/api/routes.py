@@ -30,15 +30,29 @@ login_model = rest_api.model('LoginModel', {"email": fields.String(required=True
                                             })
 
 user_edit_model = rest_api.model('UserEditModel', {"userID": fields.String(required=True, min_length=1, max_length=32),
-                                                   "username": fields.String(required=True, min_length=2,
-                                                                             max_length=32),
+                                                   "username": fields.String(required=True, min_length=2, max_length=32),
                                                    "email": fields.String(required=True, min_length=4, max_length=64)
                                                    })
 
 search_model = rest_api.model('SearchModel', {"prompt": fields.String(required=True, min_length=1, max_length=32),
-                                              "userID": fields.String(required=False, min_length=2,
-                                                                      max_length=32),
+                                              "userID": fields.String(required=False, min_length=2, max_length=32),
                                               })
+
+get_song_model = rest_api.model('GetSongModel', {"songID": fields.String(required=True)})
+
+get_artist_model = rest_api.model('GetArtistModel', {"artistID": fields.String(required=True)})
+
+get_album_model = rest_api.model('GetAlbumModel', {"albumID": fields.String(required=True)})
+
+search_suggestions_model = rest_api.model('SearchSuggestionsModel',
+                                          {"prompt": fields.String(required=True, min_length=1, max_length=32)})
+
+get_artist_songs_model = rest_api.model('GetArtistSongsModel', {"artistID": fields.String(required=True, description="returned by get_artist in songs")})
+
+get_artist_albums_model = rest_api.model('GetArtistAlbumsModel',
+                                         {"browseID": fields.String(required=True, description="returned by get_artist in albums"),
+                                          "params": fields.String(required=True, description="returned by get_artist in albums ")
+                                          })
 
 """
    Helper function for JWT token required
@@ -243,22 +257,111 @@ class GitHubLogin(Resource):
                 }}, 200
 
 
+@rest_api.expect(get_song_model)
 @rest_api.route("/api/get_song")
 class GetSong(Resource):
     def get(self):
-        song_id = request.headers["songID"]
+        song_id = request.args.get("songID")
         song = yt.get_song(song_id)
+        c = len([i for i in song['streamingData']["adaptiveFormats"] if 'video' in i['mimeType']])
+        print(c)
+        song['streamingData']["adaptiveFormats"] = song['streamingData']["adaptiveFormats"][c::]
+        for i in ['playabilityStatus', 'microformat']:
+            song.pop(i)
+        print(song.keys())
         return {"success": True,
                 "response": song
                 }, 200
+
 
 @rest_api.expect(search_model)
 @rest_api.route("/api/search")
 class Search(Resource):
 
     def get(self):
-        prompt = request.headers["prompt"]
-        search = yt.search(prompt, filter="songs")
+        prompt = request.args.get("prompt")
+        songs = yt.search(prompt, filter="songs")
+        albums = yt.search(prompt, filter="albums")
+        artists = yt.search(prompt, filter="artists")
+        for i in ['feedbackTokens', 'inLibrary', 'category', 'videoType', 'year', "resultType"]:
+            songs[0].pop(i)
+        for i in ['category', "resultType"]:
+            albums[0].pop(i)
+        for i in ['category', "resultType"]:
+            artists[0].pop(i)
         return {"success": True,
-                "response": search
+                "response":
+                    [
+                        {
+                            "songs": songs,
+                            "albums": albums,
+                            "artists": artists
+                        }
+                    ]
+                }, 200
+
+
+@rest_api.expect(search_suggestions_model)
+@rest_api.route("/api/search_suggestions")
+class SearchSuggestions(Resource):
+
+    def get(self):
+        prompt = request.args.get("prompt")
+        search_suggestions = yt.get_search_suggestions(prompt)
+        return {"success": True,
+                "response": search_suggestions
+                }, 200
+
+
+@rest_api.expect(get_album_model)
+@rest_api.route("/api/get_album")
+class GetAlbum(Resource):
+
+    def get(self):
+        album_id = request.args.get("albumID")
+        album = yt.get_album(album_id)
+        for i in []:
+            album.pop(i)
+        print(album.keys())
+        return {"success": True,
+                "response": album
+                }, 200
+
+
+@rest_api.expect(get_artist_model)
+@rest_api.route("/api/get_artist")
+class GetArtist(Resource):
+    def get(self):
+        artist_id = request.args.get("artistID")
+        artist = yt.get_artist(artist_id)
+        for i in ['videos', 'subscribers', 'subscribed']:
+            artist.pop(i)
+        print(artist.keys())
+        return {"success": True,
+                "response": artist
+                }, 200
+
+
+@rest_api.expect(get_artist_songs_model)
+@rest_api.route("/api/get_artist_songs")
+class GetArtistSongs(Resource):
+    def get(self):
+        browse_id = request.args.get("browseID")
+        artist_songs = yt.get_playlist(browse_id)
+        for i in ['title', 'artists', 'related', 'views', "description", "year", "owned"]:
+            artist_songs.pop(i)
+        return {"success": True,
+                "response": artist_songs
+                }, 200
+
+
+@rest_api.expect(get_artist_albums_model)
+@rest_api.route("/api/get_artist_albums")
+class GetArtistAlbums(Resource):
+    def get(self):
+        browse_id = request.args.get("browseID")
+        params = request.args.get("params")
+        artist_albums = yt.get_artist_albums(browse_id, params=params)
+        return {"success": True,
+                "response": artist_albums
                 }, 200

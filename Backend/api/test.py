@@ -19,15 +19,15 @@ yt = YTMusic(location="US", language="en")
 #
 # print(home)
 
-search = yt.search("never gonna give you up")
+songs_search = yt.search("never gonna give you up",filter="songs")
 
-song = yt.get_song(search[0]["videoId"])
+song = yt.get_song(songs_search[0]["videoId"])
 
 print(song)
 
-home = yt.get_home()
+# home = yt.get_home()
 
-print(home)
+print(songs_search)
 
 
 
