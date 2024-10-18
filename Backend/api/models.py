@@ -5,6 +5,7 @@ import json
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import desc
 
 db = SQLAlchemy()
 
@@ -79,3 +80,30 @@ class JWTTokenBlocklist(db.Model):
     def save(self):
         db.session.add(self)
         db.session.commit()
+
+
+class History(db.Model):
+    id = db.Column(db.Integer(), primary_key=True)
+    user_id = db.Column(db.Integer())
+    video_details = db.Column(db.String())
+    date = db.Column(db.DateTime(), default=datetime.utcnow)
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+    @classmethod
+    def get_by_user_id(cls, user_id):
+        return cls.query.filter_by(user_id=user_id).order_by(desc(cls.date)).all()
+
+    def toDICT(self):
+
+        cls_dict = {}
+        cls_dict['video_details'] = json.loads(self.video_details)
+        cls_dict['date'] = str(self.date)
+
+        return cls_dict
+
+    def toJSON(self):
+
+        return self.toDICT()
