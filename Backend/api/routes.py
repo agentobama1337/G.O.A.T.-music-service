@@ -2,15 +2,19 @@ from datetime import datetime, timezone, timedelta
 
 from functools import wraps
 
-from flask import request
+from flask import request, jsonify
 from flask_restx import Api, Resource, fields
 
 import jwt
 from ytmusicapi import YTMusic
 
-from .models import db, Users, JWTTokenBlocklist
+from .models import db, Users, JWTTokenBlocklist, History
 from .config import BaseConfig
 import requests
+
+import json
+
+from .utils import trim_song, timed
 
 rest_api = Api(version="1.0", title="Users API")
 
@@ -30,7 +34,8 @@ login_model = rest_api.model('LoginModel', {"email": fields.String(required=True
                                             })
 
 user_edit_model = rest_api.model('UserEditModel', {"userID": fields.String(required=True, min_length=1, max_length=32),
-                                                   "username": fields.String(required=True, min_length=2, max_length=32),
+                                                   "username": fields.String(required=True, min_length=2,
+                                                                             max_length=32),
                                                    "email": fields.String(required=True, min_length=4, max_length=64)
                                                    })
 
@@ -40,6 +45,11 @@ search_model = rest_api.model('SearchModel', {"prompt": fields.String(required=T
 
 get_song_model = rest_api.model('GetSongModel', {"songID": fields.String(required=True)})
 
+get_song_authorized_model = rest_api.model('GetSongAuthorizedModel', {"songID": fields.String(required=True),
+                                                                      "userID": fields.String(required=True,
+                                                                                              min_length=1,
+                                                                                              max_length=32)})
+
 get_artist_model = rest_api.model('GetArtistModel', {"artistID": fields.String(required=True)})
 
 get_album_model = rest_api.model('GetAlbumModel', {"albumID": fields.String(required=True)})
@@ -47,12 +57,18 @@ get_album_model = rest_api.model('GetAlbumModel', {"albumID": fields.String(requ
 search_suggestions_model = rest_api.model('SearchSuggestionsModel',
                                           {"prompt": fields.String(required=True, min_length=1, max_length=32)})
 
-get_artist_songs_model = rest_api.model('GetArtistSongsModel', {"artistID": fields.String(required=True, description="returned by get_artist in songs")})
+get_artist_songs_model = rest_api.model('GetArtistSongsModel', {
+    "artistID": fields.String(required=True, description="returned by get_artist in songs")})
 
 get_artist_albums_model = rest_api.model('GetArtistAlbumsModel',
-                                         {"browseID": fields.String(required=True, description="returned by get_artist in albums"),
-                                          "params": fields.String(required=True, description="returned by get_artist in albums ")
+                                         {"browseID": fields.String(required=True,
+                                                                    description="returned by get_artist in albums"),
+                                          "params": fields.String(required=True,
+                                                                  description="returned by get_artist in albums ")
                                           })
+
+get_history_model = rest_api.model('GetHistoryModel',
+                                   {"userID": fields.String(required=True, min_length=1, max_length=32)})
 
 """
    Helper function for JWT token required
@@ -79,6 +95,7 @@ def token_required(f):
                 return {"success": False,
                         "msg": "Sorry. Wrong auth token. This user does not exist."}, 400
 
+            # if datetime.utcfromtimestamp(data['exp']) < datetime.utcnow():
             token_expired = db.session.query(JWTTokenBlocklist.id).filter_by(jwt_token=token).scalar()
 
             if token_expired is not None:
@@ -153,7 +170,7 @@ class Login(Resource):
             return {"success": False,
                     "msg": "Wrong credentials."}, 400
 
-        # create access token uwing JWT
+        # create access token using JWT
         token = jwt.encode({'email': _email, 'exp': datetime.utcnow() + timedelta(minutes=30)}, BaseConfig.SECRET_KEY)
 
         user_exists.set_jwt_auth_active(True)
@@ -209,66 +226,85 @@ class LogoutUser(Resource):
         return {"success": True}, 200
 
 
-@rest_api.route('/api/sessions/oauth/github/')
-class GitHubLogin(Resource):
-    def get(self):
-        code = request.args.get('code')
-        client_id = BaseConfig.GITHUB_CLIENT_ID
-        client_secret = BaseConfig.GITHUB_CLIENT_SECRET
-        root_url = 'https://github.com/login/oauth/access_token'
-
-        params = {'client_id': client_id, 'client_secret': client_secret, 'code': code}
-
-        data = requests.post(root_url, params=params, headers={
-            'Content-Type': 'application/x-www-form-urlencoded',
-        })
-
-        response = data._content.decode('utf-8')
-        access_token = response.split('&')[0].split('=')[1]
-
-        user_data = requests.get('https://api.github.com/user', headers={
-            "Authorization": "Bearer " + access_token
-        }).json()
-
-        user_exists = Users.get_by_username(user_data['login'])
-        if user_exists:
-            user = user_exists
-        else:
-            try:
-                user = Users(username=user_data['login'], email=user_data['email'])
-                user.save()
-            except:
-                user = Users(username=user_data['login'])
-                user.save()
-
-        user_json = user.toJSON()
-
-        token = jwt.encode({"username": user_json['username'], 'exp': datetime.utcnow() + timedelta(minutes=30)},
-                           BaseConfig.SECRET_KEY)
-        user.set_jwt_auth_active(True)
-        user.save()
-
-        return {"success": True,
-                "user": {
-                    "_id": user_json['_id'],
-                    "email": user_json['email'],
-                    "username": user_json['username'],
-                    "token": token,
-                }}, 200
+# @rest_api.route('/api/sessions/oauth/github/')
+# class GitHubLogin(Resource):
+#     def get(self):
+#         code = request.args.get('code')
+#         client_id = BaseConfig.GITHUB_CLIENT_ID
+#         client_secret = BaseConfig.GITHUB_CLIENT_SECRET
+#         root_url = 'https://github.com/login/oauth/access_token'
+#
+#         params = {'client_id': client_id, 'client_secret': client_secret, 'code': code}
+#
+#         data = requests.post(root_url, params=params, headers={
+#             'Content-Type': 'application/x-www-form-urlencoded',
+#         })
+#
+#         response = data._content.decode('utf-8')
+#         access_token = response.split('&')[0].split('=')[1]
+#
+#         user_data = requests.get('https://api.github.com/user', headers={
+#             "Authorization": "Bearer " + access_token
+#         }).json()
+#
+#         user_exists = Users.get_by_username(user_data['login'])
+#         if user_exists:
+#             user = user_exists
+#         else:
+#             try:
+#                 user = Users(username=user_data['login'], email=user_data['email'])
+#                 user.save()
+#             except:
+#                 user = Users(username=user_data['login'])
+#                 user.save()
+#
+#         user_json = user.toJSON()
+#
+#         token = jwt.encode({"username": user_json['username'], 'exp': datetime.utcnow() + timedelta(minutes=30)},
+#                            BaseConfig.SECRET_KEY)
+#         user.set_jwt_auth_active(True)
+#         user.save()
+#
+#         return {"success": True,
+#                 "user": {
+#                     "_id": user_json['_id'],
+#                     "email": user_json['email'],
+#                     "username": user_json['username'],
+#                     "token": token,
+#                 }}, 200
 
 
 @rest_api.expect(get_song_model)
 @rest_api.route("/api/get_song")
 class GetSong(Resource):
+    @timed
     def get(self):
         song_id = request.args.get("songID")
         song = yt.get_song(song_id)
-        c = len([i for i in song['streamingData']["adaptiveFormats"] if 'video' in i['mimeType']])
-        print(c)
-        song['streamingData']["adaptiveFormats"] = song['streamingData']["adaptiveFormats"][c::]
-        for i in ['playabilityStatus', 'microformat']:
-            song.pop(i)
-        print(song.keys())
+
+        song = trim_song(song)
+
+        return {"success": True,
+                "response": song
+                }, 200
+
+
+@rest_api.expect(get_song_authorized_model)
+@rest_api.route("/api/authorized/get_song")
+class GetSongAuthorized(Resource):
+    @token_required
+    @timed
+    def get(self, current_user):
+        song_id = request.args.get("songID")
+        song = yt.get_song(song_id)
+
+        user_id = self.id
+
+        history_item = History(user_id=user_id, video_details=json.dumps(song['videoDetails']))
+        history_item.save()
+
+        song = trim_song(song)
+
         return {"success": True,
                 "response": song
                 }, 200
@@ -278,17 +314,26 @@ class GetSong(Resource):
 @rest_api.route("/api/search")
 class Search(Resource):
 
+    @timed
     def get(self):
+
         prompt = request.args.get("prompt")
         songs = yt.search(prompt, filter="songs")
         albums = yt.search(prompt, filter="albums")
         artists = yt.search(prompt, filter="artists")
-        for i in ['feedbackTokens', 'inLibrary', 'category', 'videoType', 'year', "resultType"]:
-            songs[0].pop(i)
-        for i in ['category', "resultType"]:
-            albums[0].pop(i)
-        for i in ['category', "resultType"]:
-            artists[0].pop(i)
+        try:
+            for song in songs:
+                for i in ['feedbackTokens', 'inLibrary', 'category', 'videoType', 'year', "resultType"]:
+                    song.pop(i)
+            for album in albums:
+                for i in ['category', "resultType"]:
+                    album.pop(i)
+            for artist in artists:
+                for i in ['category', "resultType"]:
+                    artist.pop(i)
+        except:
+            pass
+
         return {"success": True,
                 "response":
                     [
@@ -305,6 +350,7 @@ class Search(Resource):
 @rest_api.route("/api/search_suggestions")
 class SearchSuggestions(Resource):
 
+    @timed
     def get(self):
         prompt = request.args.get("prompt")
         search_suggestions = yt.get_search_suggestions(prompt)
@@ -317,12 +363,10 @@ class SearchSuggestions(Resource):
 @rest_api.route("/api/get_album")
 class GetAlbum(Resource):
 
+    @timed
     def get(self):
         album_id = request.args.get("albumID")
         album = yt.get_album(album_id)
-        for i in []:
-            album.pop(i)
-        print(album.keys())
         return {"success": True,
                 "response": album
                 }, 200
@@ -331,12 +375,15 @@ class GetAlbum(Resource):
 @rest_api.expect(get_artist_model)
 @rest_api.route("/api/get_artist")
 class GetArtist(Resource):
+    @timed
     def get(self):
         artist_id = request.args.get("artistID")
         artist = yt.get_artist(artist_id)
-        for i in ['videos', 'subscribers', 'subscribed']:
-            artist.pop(i)
-        print(artist.keys())
+        try:
+            for i in ['videos', 'subscribers', 'subscribed']:
+                artist.pop(i)
+        except:
+            pass
         return {"success": True,
                 "response": artist
                 }, 200
@@ -345,11 +392,17 @@ class GetArtist(Resource):
 @rest_api.expect(get_artist_songs_model)
 @rest_api.route("/api/get_artist_songs")
 class GetArtistSongs(Resource):
+    @timed
     def get(self):
         browse_id = request.args.get("browseID")
         artist_songs = yt.get_playlist(browse_id)
-        for i in ['title', 'artists', 'related', 'views', "description", "year", "owned"]:
-            artist_songs.pop(i)
+
+        try:
+            for i in ['title', 'artists', 'related', 'views', "description", "year", "owned"]:
+                artist_songs.pop(i)
+        except:
+            pass
+
         return {"success": True,
                 "response": artist_songs
                 }, 200
@@ -358,10 +411,48 @@ class GetArtistSongs(Resource):
 @rest_api.expect(get_artist_albums_model)
 @rest_api.route("/api/get_artist_albums")
 class GetArtistAlbums(Resource):
+    @timed
     def get(self):
         browse_id = request.args.get("browseID")
         params = request.args.get("params")
         artist_albums = yt.get_artist_albums(browse_id, params=params)
         return {"success": True,
                 "response": artist_albums
+                }, 200
+
+
+# @rest_api.expect(get_home_model)
+@rest_api.route("/api/get_home")
+class GetHome(Resource):
+    @timed
+    def get(self):
+        home = yt.get_home(limit=20)
+
+        try:
+            for i in ['Популярно в Shorts', 'Видеоклипы для вас', 'Popular in shorts', 'Music videos for you']:
+                home.pop(i)
+        except:
+            pass
+
+        print([i['title'] for i in home])
+
+        return {"success": True,
+                "response": home
+                }, 200
+
+
+# @rest_api.expect(get_history_model)
+@rest_api.route("/api/authorized/get_history")
+class GetHistory(Resource):
+    @token_required
+    @timed
+    def get(self, current_user):
+        token = request.headers['authorization']
+
+        user_id = self.id
+
+        user_history = [i.toJSON() for i in History.get_by_user_id(user_id=user_id)]
+
+        return {"success": True,
+                "response": user_history
                 }, 200
