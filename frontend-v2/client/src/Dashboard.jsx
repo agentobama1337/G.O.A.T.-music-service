@@ -6,7 +6,7 @@ import Player from "./Player";
 
 
 const SpotifyApi = new SpotifyWebApi({ 
-  clientId: 'a1eae6a5e0884ad6818338c12e07d898'
+  clientId: 'cdcc0f73d85f4256bb61e5db41276e86'
  })
 
 
@@ -15,6 +15,12 @@ const SpotifyApi = new SpotifyWebApi({
 
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [playingTrack, setPlayingTrack] = useState();
+
+  function chooseTrack(track) {
+    setPlayingTrack(track);
+    //setSearch('');
+  }
 
   useEffect(() => {
     if (!accessToken) return
@@ -64,11 +70,11 @@ const SpotifyApi = new SpotifyWebApi({
       <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-lg">
         <h2 className="text-lg font-semibold mb-4">Songs</h2>
         {searchResults.map(track => (
-          <TrackSearchResult track={track} key={track.uri} />
+          <TrackSearchResult track={track} key={track.uri} chooseTrack={chooseTrack} />
         ))}
       </div>
-      <div className="sticky bottom-0">
-        <Player accessToken={accessToken} />
+      <div className="fixed bottom-0 w-full max-w-lg">
+        <Player accessToken={accessToken} trackUri={playingTrack?.uri} />
       </div>
     </div>
   );

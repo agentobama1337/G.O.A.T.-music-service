@@ -1,6 +1,15 @@
-export default function TrackSearchResult({ track }) {
+export default function TrackSearchResult({ track, chooseTrack }) {
+
+  function handlePlay() {
+    chooseTrack(track)
+  }
+
   return (
-    <div className="flex items-center mb-4 p-2 bg-gray-50 rounded-lg shadow">
+    <div
+      className="flex items-center mb-4 p-2 bg-gray-50 rounded-lg shadow"
+      style={{cursor: 'pointer'}}
+      onClick={handlePlay}
+    >
       <img 
         src={track.albumUrl} 
         alt={track.title} 
