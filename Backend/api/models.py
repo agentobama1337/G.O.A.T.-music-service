@@ -91,7 +91,7 @@ class History(db.Model):
 
     @classmethod
     def get_by_user_id(cls, user_id):
-        return cls.query.filter_by(user_id=user_id).order_by(desc(cls.date)).all()
+        return cls.query.filter_by(user_id=user_id).all()[::-1]
 
     def toDICT(self):
         cls_dict = {}
@@ -116,6 +116,7 @@ class SearchHistory(db.Model):
 
     @classmethod
     def get_by_user_id(cls, user_id):
-        result = cls.query.filter_by(user_id=user_id).order_by(desc(cls.date)).limit(5)
-        return [str(i.search_prompt) for i in result]
+        result = cls.query.with_entities(cls.search_prompt).distinct().filter_by(user_id=user_id).all()[::-1]
+        print(result)
+        return [i.search_prompt for i in result]
 

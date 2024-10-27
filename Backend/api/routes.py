@@ -277,14 +277,6 @@ class LogoutUser(Resource):
 class GetSong(Resource):
     @timed
     def get(self):
-        # song = yt.get_song(song_id)
-        #
-        # song = trim_song(song)
-        #
-        #
-        # return {"success": True,
-        #         "response": song
-        #         }, 200
 
         song_id = request.args.get("songID")
 
@@ -301,7 +293,7 @@ class GetSong(Resource):
 
 @rest_api.expect(get_song_model)
 @rest_api.route("/api/authorized/get_song")
-class GetSongAuthorized(Resource):
+class GetSongAuthorized(GetSong):
     @token_required
     @timed
     def get(self, current_user):
@@ -315,10 +307,8 @@ class GetSongAuthorized(Resource):
 
         song = trim_song(song)
 
-        return {"success": True,
-                "response": song
-                }, 200
-
+        response = GetSong.get(self)
+        return response
 
 @rest_api.expect(search_model)
 @rest_api.route("/api/search")
@@ -492,7 +482,6 @@ class GetSearchHistory(Resource):
 
         search_history = SearchHistory.get_by_user_id(user_id=user_id)
 
-        print(search_history)
 
         return {"success": True,
                 "response": search_history
