@@ -1,5 +1,4 @@
 
-
 import os, json
 
 from flask import Flask
@@ -34,6 +33,13 @@ def initialize_database():
 
         print('> Fallback to SQLite ')
         db.create_all()
+@app.before_first_request
+def initialize_song_storage():
+
+    path = r'song_storage'
+    if not os.path.exists(path):
+        os.makedirs(path)
+
 
 
 """

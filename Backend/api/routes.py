@@ -1,14 +1,18 @@
+import os
+import sys
 from datetime import datetime, timezone, timedelta
 
 from functools import wraps
+from subprocess import run
+from time import sleep
 
-from flask import request, jsonify
+from flask import request, jsonify, send_file
 from flask_restx import Api, Resource, fields
 
 import jwt
 from ytmusicapi import YTMusic
 
-from .models import db, Users, JWTTokenBlocklist, History
+from .models import db, Users, JWTTokenBlocklist, History, SearchHistory
 from .config import BaseConfig
 import requests
 
@@ -40,15 +44,9 @@ user_edit_model = rest_api.model('UserEditModel', {"userID": fields.String(requi
                                                    })
 
 search_model = rest_api.model('SearchModel', {"prompt": fields.String(required=True, min_length=1, max_length=32),
-                                              "userID": fields.String(required=False, min_length=2, max_length=32),
                                               })
 
 get_song_model = rest_api.model('GetSongModel', {"songID": fields.String(required=True)})
-
-get_song_authorized_model = rest_api.model('GetSongAuthorizedModel', {"songID": fields.String(required=True),
-                                                                      "userID": fields.String(required=True,
-                                                                                              min_length=1,
-                                                                                              max_length=32)})
 
 get_artist_model = rest_api.model('GetArtistModel', {"artistID": fields.String(required=True)})
 
@@ -279,17 +277,29 @@ class LogoutUser(Resource):
 class GetSong(Resource):
     @timed
     def get(self):
+        # song = yt.get_song(song_id)
+        #
+        # song = trim_song(song)
+        #
+        #
+        # return {"success": True,
+        #         "response": song
+        #         }, 200
+
         song_id = request.args.get("songID")
-        song = yt.get_song(song_id)
 
-        song = trim_song(song)
+        dir_path = "song_storage/"
 
-        return {"success": True,
-                "response": song
-                }, 200
+        path = dir_path + str(song_id) + ".mp3"
+
+        command = f"yt-dlp -f 249 {str(song_id)} -o {path}"
+
+        if not os.path.exists(path):
+            run(command, shell=True)
+        return send_file("../" + path, mimetype="audio/mp3")
 
 
-@rest_api.expect(get_song_authorized_model)
+@rest_api.expect(get_song_model)
 @rest_api.route("/api/authorized/get_song")
 class GetSongAuthorized(Resource):
     @token_required
@@ -344,6 +354,23 @@ class Search(Resource):
                         }
                     ]
                 }, 200
+
+
+@rest_api.expect(search_model)
+@rest_api.route("/api/authorized/search")
+class SearchAuthorized(Search):
+    @token_required
+    @timed
+    def get(self, current_user):
+        prompt = request.args.get("prompt")
+
+        user_id = self.id
+
+        search_history_item = SearchHistory(user_id=user_id, search_prompt=prompt)
+        search_history_item.save()
+
+        response = Search.get(self)
+        return response
 
 
 @rest_api.expect(search_suggestions_model)
@@ -447,12 +474,26 @@ class GetHistory(Resource):
     @token_required
     @timed
     def get(self, current_user):
-        token = request.headers['authorization']
-
         user_id = self.id
 
         user_history = [i.toJSON() for i in History.get_by_user_id(user_id=user_id)]
 
         return {"success": True,
                 "response": user_history
+                }, 200
+
+
+@rest_api.route("/api/authorized/get_search_history")
+class GetSearchHistory(Resource):
+    @token_required
+    @timed
+    def get(self, current_user):
+        user_id = self.id
+
+        search_history = SearchHistory.get_by_user_id(user_id=user_id)
+
+        print(search_history)
+
+        return {"success": True,
+                "response": search_history
                 }, 200
