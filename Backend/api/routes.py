@@ -18,7 +18,7 @@ import requests
 
 import json
 
-from .utils import trim_song, timed
+from .utils import trim_song, timed, get_unique
 
 rest_api = Api(version="1.0", title="Users API")
 
@@ -277,7 +277,6 @@ class LogoutUser(Resource):
 class GetSong(Resource):
     @timed
     def get(self):
-
         song_id = request.args.get("songID")
 
         dir_path = "song_storage/"
@@ -310,6 +309,7 @@ class GetSongAuthorized(GetSong):
         response = GetSong.get(self)
         return response
 
+
 @rest_api.expect(search_model)
 @rest_api.route("/api/search")
 class Search(Resource):
@@ -318,9 +318,10 @@ class Search(Resource):
     def get(self):
 
         prompt = request.args.get("prompt")
-        songs = yt.search(prompt, filter="songs")
-        albums = yt.search(prompt, filter="albums")
-        artists = yt.search(prompt, filter="artists")
+        songs = get_unique(yt.search(prompt, filter="songs", limit=20), "videoId")
+        albums = get_unique(yt.search(prompt, filter="albums", limit=20), 'browseId')
+        artists = get_unique(yt.search(prompt, filter="artists", limit=20), 'browseId')
+
         try:
             for song in songs:
                 for i in ['feedbackTokens', 'inLibrary', 'category', 'videoType', 'year', "resultType"]:
@@ -336,13 +337,11 @@ class Search(Resource):
 
         return {"success": True,
                 "response":
-                    [
-                        {
-                            "songs": songs,
-                            "albums": albums,
-                            "artists": artists
-                        }
-                    ]
+                    {
+                        "songs": songs,
+                        "albums": albums,
+                        "artists": artists
+                    }
                 }, 200
 
 
@@ -481,7 +480,6 @@ class GetSearchHistory(Resource):
         user_id = self.id
 
         search_history = SearchHistory.get_by_user_id(user_id=user_id)
-
 
         return {"success": True,
                 "response": search_history

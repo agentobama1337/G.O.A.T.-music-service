@@ -13,6 +13,19 @@ def trim_song(song):
     return song
 
 
+def get_unique(l, param):
+    seen = set()
+    for d in l:
+        i = d[param]
+        if i not in seen:
+            seen.add(i)
+        else:
+            l.reverse()
+            l.remove(d)
+            l.reverse()
+    return l
+
+
 def timed(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
