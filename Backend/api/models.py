@@ -1,4 +1,3 @@
-
 from datetime import datetime
 
 import json
@@ -50,13 +49,12 @@ class Users(db.Model):
     @classmethod
     def get_by_email(cls, email):
         return cls.query.filter_by(email=email).first()
-    
+
     @classmethod
     def get_by_username(cls, username):
         return cls.query.filter_by(username=username).first()
 
     def toDICT(self):
-
         cls_dict = {}
         cls_dict['_id'] = self.id
         cls_dict['username'] = self.username
@@ -65,7 +63,6 @@ class Users(db.Model):
         return cls_dict
 
     def toJSON(self):
-
         return self.toDICT()
 
 
@@ -94,10 +91,9 @@ class History(db.Model):
 
     @classmethod
     def get_by_user_id(cls, user_id):
-        return cls.query.filter_by(user_id=user_id).order_by(desc(cls.date)).all()
+        return cls.query.filter_by(user_id=user_id).all()[::-1]
 
     def toDICT(self):
-
         cls_dict = {}
         cls_dict['video_details'] = json.loads(self.video_details)
         cls_dict['date'] = str(self.date)
@@ -105,5 +101,22 @@ class History(db.Model):
         return cls_dict
 
     def toJSON(self):
-
         return self.toDICT()
+
+
+class SearchHistory(db.Model):
+    id = db.Column(db.Integer(), primary_key=True)
+    user_id = db.Column(db.Integer())
+    search_prompt = db.Column(db.String())
+    date = db.Column(db.DateTime(), default=datetime.utcnow)
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+    @classmethod
+    def get_by_user_id(cls, user_id):
+        result = cls.query.with_entities(cls.search_prompt).distinct().filter_by(user_id=user_id).all()[::-1]
+        print(result)
+        return [i.search_prompt for i in result]
+
