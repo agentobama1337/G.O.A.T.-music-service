@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react';
 import AlbumView from './AlbumView';
+import ArtistView from './ArtistView';
 import axios from 'axios';
 
 const api = axios.create({
@@ -18,6 +19,7 @@ const MusicApp = () => {
   const audioRef = useRef(null);
   const [currentView, setCurrentView] = useState('search'); // 'search' or 'album'
   const [currentAlbum, setCurrentAlbum] = useState(null);
+  const [currentArtist, setCurrentArtist] = useState(null);
 
   useEffect(() => {
     login();
@@ -118,6 +120,11 @@ const MusicApp = () => {
     }
   };
 
+  const handleArtistClick = (artist) => {
+    setCurrentArtist(artist);
+    setCurrentView('artist');
+  };
+
   const handleAlbumClick = (album) => {
     setCurrentAlbum(album);
     setCurrentView('album');
@@ -156,7 +163,6 @@ const MusicApp = () => {
 
   // Вспомогательная функция для получения имен исполнителей
   const getArtistNames = (song) => {
-    console.log(song)
     if (song?.artists && Array.isArray(song.artists)) {
       return song.artists.map(artist => artist?.name || '').filter(Boolean).join(', ');
     }
@@ -267,7 +273,7 @@ const MusicApp = () => {
                   {searchResults[0].artists.map((artist, index) => artist && (
                     <div
                       key={artist.browseId || index}
-                      onClick={() => handlePlayTrack(artist)}
+                      onClick={() => handleArtistClick(artist.browseId)}
                       className="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 cursor-pointer"
                     >
                       {getThumbnailUrl(artist) && (
@@ -291,6 +297,16 @@ const MusicApp = () => {
           </div>
         )}
       </div>
+      ) : currentView === 'artist' ? (
+        <ArtistView
+          browseId={currentArtist}
+          onBackClick={() => {
+            setCurrentView('search');
+            setCurrentArtist(null);
+          }}
+          onTrackSelect={handlePlayTrack}
+          api={api}
+        />
       ) : (
         <AlbumView
           browseId={currentAlbum?.browseId}
