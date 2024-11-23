@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Loader } from 'lucide-react';
 import AlbumView from './AlbumView';
 import ArtistView from './ArtistView';
+import SearchWithSuggestions from './SearchWithSuggestions';
 import axios from 'axios';
 
 const api = axios.create({
@@ -9,17 +10,21 @@ const api = axios.create({
 });
 
 const MusicApp = () => {
-  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [token, setToken] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const audioRef = useRef(null);
-  const [currentView, setCurrentView] = useState('search'); // 'search' or 'album'
+  const [currentView, setCurrentView] = useState('search');
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [currentArtist, setCurrentArtist] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [playlist, setPlaylist] = useState([]);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
+  const audioRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
+  const progressRef = useRef(null);
 
   useEffect(() => {
     login();
@@ -47,11 +52,8 @@ const MusicApp = () => {
     }
   };
 
-  const searchTimeoutRef = useRef(null);
-
   const handleSearch = useCallback(async (e) => {
     const query = e.target.value;
-    setSearchQuery(query);
     
     // Clear previous timeout
     if (searchTimeoutRef.current) {
@@ -93,9 +95,23 @@ const MusicApp = () => {
   }, []);
 
 
-  const handlePlayTrack = async (track) => {
+  const handlePlayTrack = async (track, tracksList = null) => {
     if (!token || !track || !track.videoId) return;
-  
+    
+    setIsLoading(true);
+    
+    // Обновляем плейлист
+    if (tracksList) {
+      setPlaylist(tracksList);
+      const index = tracksList.findIndex(t => t.videoId === track.videoId);
+      setCurrentTrackIndex(index);
+    } else if (searchResults[0]?.songs?.length > 0) {
+      // Если tracksList не передан, но есть результаты поиска, используем их
+      setPlaylist(searchResults[0].songs);
+      const index = searchResults[0].songs.findIndex(t => t.videoId === track.videoId);
+      setCurrentTrackIndex(index);
+    }
+    
     try {
       const response = await api.get('/api/get_song', {
         params: { songID: track.videoId },
@@ -105,7 +121,8 @@ const MusicApp = () => {
       if (response.data) {
         setCurrentTrack(track);
         if (audioRef.current) {
-          audioRef.current.src = URL.createObjectURL(response.data);
+          const url = URL.createObjectURL(response.data);
+          audioRef.current.src = url;
           try {
             await audioRef.current.play();
             setIsPlaying(true);
@@ -117,17 +134,23 @@ const MusicApp = () => {
       }
     } catch (error) {
       console.error('Playback error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleArtistClick = (artist) => {
-    setCurrentArtist(artist);
-    setCurrentView('artist');
+  const handleNextTrack = () => {
+    if (playlist.length === 0 || currentTrackIndex === -1) return;
+    const nextIndex = (currentTrackIndex + 1) % playlist.length;
+    handlePlayTrack(playlist[nextIndex]);
+    setCurrentTrackIndex(nextIndex);
   };
 
-  const handleAlbumClick = (album) => {
-    setCurrentAlbum(album);
-    setCurrentView('album');
+  const handlePrevTrack = () => {
+    if (playlist.length === 0 || currentTrackIndex === -1) return;
+    const prevIndex = (currentTrackIndex - 1 + playlist.length) % playlist.length;
+    handlePlayTrack(playlist[prevIndex]);
+    setCurrentTrackIndex(prevIndex);
   };
 
   const togglePlayPause = () => {
@@ -141,10 +164,45 @@ const MusicApp = () => {
     }
   };
 
+  const handleArtistClick = (artist) => {
+    setCurrentArtist(artist);
+    setCurrentView('artist');
+  };
+
+  const handleAlbumClick = (album) => {
+    setCurrentAlbum(album);
+    setCurrentView('album');
+  };
+
   const handleTimeUpdate = () => {
     if (audioRef.current) {
       setCurrentTime(Math.floor(audioRef.current.currentTime));
     }
+  };
+
+  const handleProgressClick = (e) => {
+    if (!audioRef.current || !progressRef.current) return;
+    
+    const bounds = progressRef.current.getBoundingClientRect();
+    const x = e.clientX - bounds.left;
+    const width = bounds.width;
+    const percentage = x / width;
+    const newTime = percentage * audioRef.current.duration;
+    
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(Math.floor(newTime));
+  };
+
+  const handleProgressDrag = (e) => {
+    if (!audioRef.current || !progressRef.current) return;
+    
+    const bounds = progressRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - bounds.left, bounds.width));
+    const percentage = x / bounds.width;
+    const newTime = percentage * audioRef.current.duration;
+    
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(Math.floor(newTime));
   };
 
   const formatDuration = (seconds) => {
@@ -172,17 +230,11 @@ const MusicApp = () => {
   return (
     <div className="flex flex-col h-screen bg-gray-100">
       <div className="p-4 bg-white shadow flex justify-between items-center">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={handleSearch}
-            placeholder="Search for songs, artists, or albums..."
-            className="w-full p-2 pl-10 pr-4 border rounded-lg focus:outline-none focus:border-blue-500"
-            disabled={!isLoggedIn}
-          />
-          <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-        </div>
+        <SearchWithSuggestions
+          onSearch={handleSearch}
+          isDisabled={!isLoggedIn}
+          api={api}
+        />
         <div className="ml-4">
           {isLoggedIn ? (
             <span className="text-green-500">Connected</span>
@@ -198,9 +250,11 @@ const MusicApp = () => {
         onEnded={() => setIsPlaying(false)}
       />
 
-{currentView === 'search' ? (
+      {currentView === 'search' ? (
         <div className="flex-1 overflow-y-auto p-4">
         <h2 className="text-2xl font-bold mb-4">Search Results</h2>
+
+        
         
         {searchResults.length > 0 && (
           <div className="space-y-6">
@@ -239,8 +293,8 @@ const MusicApp = () => {
                 <div className="space-y-2">
                   {searchResults[0].songs.map((song, index) => song && (
                     <div
-                      key={song.browseId || index}
-                      onClick={() => handlePlayTrack(song)}
+                      key={song.videoId || index}
+                      onClick={() => handlePlayTrack(song, searchResults[0].songs)}
                       className="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 cursor-pointer"
                     >
                       {getThumbnailUrl(song) && (
@@ -321,7 +375,7 @@ const MusicApp = () => {
     
     
 
-      <div className="bg-white border-t p-4">
+    <div className="bg-white border-t p-4">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
           <div className="flex items-center w-1/4">
             {currentTrack && (
@@ -344,17 +398,32 @@ const MusicApp = () => {
           </div>
 
           <div className="flex items-center justify-center w-2/4">
-            <button className="p-2 hover:bg-gray-100 rounded-full">
-              <SkipBack size={20} />
+            <button 
+              className="p-2 hover:bg-gray-100 rounded-full"
+              onClick={handlePrevTrack}
+              disabled={playlist.length === 0}
+            >
+              <SkipBack size={20} className={playlist.length === 0 ? 'text-gray-300' : 'text-gray-600'} />
             </button>
             <button
               className="p-3 mx-4 bg-gray-100 hover:bg-gray-200 rounded-full"
               onClick={togglePlayPause}
+              disabled={isLoading || !currentTrack}
             >
-              {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+              {isLoading ? (
+                <Loader size={24} className="animate-spin" />
+              ) : isPlaying ? (
+                <Pause size={24} />
+              ) : (
+                <Play size={24} />
+              )}
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-full">
-              <SkipForward size={20} />
+            <button 
+              className="p-2 hover:bg-gray-100 rounded-full"
+              onClick={handleNextTrack}
+              disabled={playlist.length === 0}
+            >
+              <SkipForward size={20} className={playlist.length === 0 ? 'text-gray-300' : 'text-gray-600'} />
             </button>
           </div>
 
@@ -385,7 +454,23 @@ const MusicApp = () => {
                 {currentTrack?.duration || '0:00'}
               </div>
             </div>
-            <div className="flex h-1 bg-gray-200 rounded">
+            <div 
+              ref={progressRef}
+              className="flex h-2 bg-gray-200 rounded cursor-pointer"
+              onClick={handleProgressClick}
+              onMouseDown={(e) => {
+                const handleMouseMove = (e) => handleProgressDrag(e);
+                const handleMouseUp = () => {
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                };
+                
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+                
+                handleProgressDrag(e);
+              }}
+            >
               <div
                 style={{
                   width: `${currentTrack ? (currentTime / (currentTrack.duration_seconds || 1)) * 100 : 0}%`
@@ -396,6 +481,12 @@ const MusicApp = () => {
           </div>
         </div>
       </div>
+
+      <audio
+        ref={audioRef}
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleNextTrack}
+      />
     </div>
   );
 };

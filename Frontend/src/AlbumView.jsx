@@ -4,7 +4,8 @@ import { ArrowLeft } from 'lucide-react';
 const AlbumView = ({ browseId, onBackClick, onTrackSelect, api }) => {
   const [albumTracks, setAlbumTracks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [albumTumbnail, setAlbumTumbnail] = useState('');
+  const [albumThumbnail, setAlbumThumbnail] = useState('');
+  const [albumInfo, setAlbumInfo] = useState(null);
 
   useEffect(() => {
     const fetchAlbumTracks = async () => {
@@ -13,16 +14,23 @@ const AlbumView = ({ browseId, onBackClick, onTrackSelect, api }) => {
           params: { albumID: browseId } 
         });
 
-        console.log(response)
-
         if (response.data.success && response.data.response) {
-          setAlbumTracks(response.data.response.tracks);
-          setAlbumTumbnail(response.data.response.thumbnails[0].url)
+          // Сохраняем информацию об альбоме
+          setAlbumInfo(response.data.response);
+          // Добавляем к каждому треку информацию об альбоме
+          const tracksWithAlbumInfo = response.data.response.tracks.map(track => ({
+            ...track,
+            albumId: browseId,
+            albumTitle: response.data.response.title,
+            thumbnails: response.data.response.thumbnails // Используем обложку альбома
+          }));
+          setAlbumTracks(tracksWithAlbumInfo);
+          setAlbumThumbnail(response.data.response.thumbnails[response.data.response.thumbnails.length - 1].url);
         }
       } catch (error) {
         console.error('Error fetching album:', error);
         setAlbumTracks([]);
-        setAlbumTumbnail('');
+        setAlbumThumbnail('');
       } finally {
         setLoading(false);
       }
@@ -32,6 +40,11 @@ const AlbumView = ({ browseId, onBackClick, onTrackSelect, api }) => {
       fetchAlbumTracks();
     }
   }, [browseId, api]);
+
+  const handleTrackSelect = (track, index) => {
+    // Передаем только треки из текущего альбома
+    onTrackSelect(track, albumTracks);
+  };
 
   if (loading) {
     return (
@@ -58,21 +71,36 @@ const AlbumView = ({ browseId, onBackClick, onTrackSelect, api }) => {
         Back to Search
       </button>
 
+      {/* Album Info Header */}
+      {albumInfo && (
+        <div className="flex items-start mb-6">
+          {albumThumbnail && (
+            <img
+              src={albumThumbnail}
+              alt={albumInfo.title}
+              className="w-40 h-40 rounded-lg shadow-lg"
+            />
+          )}
+          <div className="ml-6">
+            <h1 className="text-2xl font-bold">{albumInfo.title}</h1>
+            {albumInfo.artist && (
+              <p className="text-gray-600 text-lg">{albumInfo.artist}</p>
+            )}
+            {albumInfo.year && (
+              <p className="text-gray-500">{albumInfo.year}</p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         {albumTracks.map((track, index) => (
           <div
             key={track.videoId || index}
-            onClick={() => onTrackSelect(track)}
+            onClick={() => handleTrackSelect(track, index)}
             className="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 cursor-pointer"
           >
             <div className="w-8 text-gray-400">{index + 1}</div>
-            {albumTumbnail && (
-              <img
-                src={albumTumbnail}
-                alt={track.title}
-                className="w-12 h-12 rounded"
-              />
-            )}
             <div className="ml-3 flex-1">
               <div className="font-semibold">{track.title}</div>
               <div className="text-sm text-gray-600">
