@@ -107,7 +107,7 @@ const ArtistView = ({ browseId, onBackClick, onTrackSelect, api }) => {
               {artistData.songs.results.map((track, index) => (
                 <div
                   key={track.videoId}
-                  onClick={() => onTrackSelect(track)}
+                  onClick={() => onTrackSelect(track, artistData.songs.results)} // Передаем список популярных треков
                   className="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 cursor-pointer"
                 >
                   <div className="w-8 text-gray-400">{index + 1}</div>
