@@ -1,11 +1,11 @@
-
-import os, json
+import json
+import os
 
 from flask import Flask
 from flask_cors import CORS
 
-from .routes import rest_api
 from .models import db
+from .routes import rest_api
 
 app = Flask(__name__)
 
