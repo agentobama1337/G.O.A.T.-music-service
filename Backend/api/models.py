@@ -56,7 +56,7 @@ class Users(db.Model):
 
     def toDICT(self):
         cls_dict = {}
-        cls_dict['_id'] = self.id
+        cls_dict['id'] = self.id
         cls_dict['username'] = self.username
         cls_dict['email'] = self.email
 

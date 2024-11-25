@@ -56,7 +56,7 @@ search_suggestions_model = rest_api.model('SearchSuggestionsModel',
                                           {"prompt": fields.String(required=True, min_length=1, max_length=32)})
 
 get_artist_songs_model = rest_api.model('GetArtistSongsModel', {
-    "artistID": fields.String(required=True, description="returned by get_artist in songs")})
+    "browseID": fields.String(required=True, description="returned by get_artist in songs")})
 
 get_artist_albums_model = rest_api.model('GetArtistAlbumsModel',
                                          {"browseID": fields.String(required=True,
@@ -93,7 +93,6 @@ def token_required(f):
                 return {"success": False,
                         "msg": "Sorry. Wrong auth token. This user does not exist."}, 400
 
-            # if datetime.utcfromtimestamp(data['exp']) < datetime.utcnow():
             token_expired = db.session.query(JWTTokenBlocklist.id).filter_by(jwt_token=token).scalar()
 
             if token_expired is not None:
@@ -177,6 +176,16 @@ class Login(Resource):
         return {"success": True,
                 "token": token,
                 "user": user_exists.toJSON()}, 200
+
+
+@rest_api.route("/api/users/check_session")
+class CheckSession(Resource):
+    @token_required
+    def get(self, current_user):
+        user = self.toJSON();
+        return {"success": True,
+                "user": user
+                }, 200
 
 
 @rest_api.route('/api/users/edit')
