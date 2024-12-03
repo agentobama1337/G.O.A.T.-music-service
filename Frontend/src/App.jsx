@@ -3,6 +3,7 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, Loader } from 'lucide-reac
 import AlbumView from './AlbumView';
 import ArtistView from './ArtistView';
 import SearchWithSuggestions from './SearchWithSuggestions';
+import AuthComponent from './AuthComponent';
 import axios from 'axios';
 
 const api = axios.create({
@@ -21,14 +22,11 @@ const MusicApp = () => {
   const [currentArtist, setCurrentArtist] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [playlist, setPlaylist] = useState([]);
+  const [userData, setUserData] = useState(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const audioRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const progressRef = useRef(null);
-
-  useEffect(() => {
-    login();
-  }, []);
 
   useEffect(() => {
     if (token) {
@@ -36,36 +34,19 @@ const MusicApp = () => {
     }
   }, [token]);
 
-  const login = async () => {
-    try {
-      const { data } = await api.post('/api/users/login', {
-        email: "test@appseed.us",
-        password: "pass"
-      });
-      
-      if (data.success && data.token) {
-        setToken(data.token);
-        setIsLoggedIn(true);
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-    }
-  };
-
   const handleSearch = useCallback(async (e) => {
     const query = e.target.value;
     
-    // Clear previous timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
     
-    // Set new timeout
     searchTimeoutRef.current = setTimeout(async () => {
       if (query.length > 0 && token) {
         try {
           const { data } = await api.get('/api/search', {
-            params: { prompt: query }
+            params: { prompt: query },
+            headers: { Authorization: `Bearer ${token}` }
           });
           
           if (data.success) {
@@ -82,10 +63,9 @@ const MusicApp = () => {
       } else {
         setSearchResults([]);
       }
-    }, 300); // 500ms delay
+    }, 300);
   }, [token]);
 
-  // Make sure to clean up the timeout when component unmounts
   useEffect(() => {
     return () => {
       if (searchTimeoutRef.current) {
@@ -95,18 +75,36 @@ const MusicApp = () => {
   }, []);
 
 
+  const handleLogin = (token, userData = null) => {
+    if (token) {
+      setToken(token);
+      setIsLoggedIn(true);
+      if (userData) {
+        setUserData(userData);
+      }
+    } else {
+      // Logout case
+      setToken(null);
+      setIsLoggedIn(false);
+      setUserData(null);
+      // Очищаем локальное хранилище
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
+      // Сбрасываем заголовок авторизации
+      api.defaults.headers.common['Authorization'] = '';
+    }
+  };
+
   const handlePlayTrack = async (track, tracksList = null) => {
     if (!token || !track || !track.videoId) return;
     
     setIsLoading(true);
     
-    // Обновляем плейлист
     if (tracksList) {
       setPlaylist(tracksList);
       const index = tracksList.findIndex(t => t.videoId === track.videoId);
       setCurrentTrackIndex(index);
     } else if (searchResults[0]?.songs?.length > 0) {
-      // Если tracksList не передан, но есть результаты поиска, используем их
       setPlaylist(searchResults[0].songs);
       const index = searchResults[0].songs.findIndex(t => t.videoId === track.videoId);
       setCurrentTrackIndex(index);
@@ -115,7 +113,8 @@ const MusicApp = () => {
     try {
       const response = await api.get('/api/get_song', {
         params: { songID: track.videoId },
-        responseType: 'blob'
+        responseType: 'blob',
+        headers: { Authorization: `Bearer ${token}` }
       });
   
       if (response.data) {
@@ -229,15 +228,30 @@ const MusicApp = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
+
+{!isLoggedIn && (
+        <AuthComponent onLogin={handleLogin} api={api} />
+      )}  
+
       <div className="p-4 bg-white shadow flex justify-between items-center">
         <SearchWithSuggestions
           onSearch={handleSearch}
           isDisabled={!isLoggedIn}
           api={api}
         />
-        <div className="ml-4">
+        <div className="ml-4 flex items-center">
           {isLoggedIn ? (
-            <span className="text-green-500">Connected</span>
+            <>
+              <span className="text-green-500 mr-2">
+                {userData?.email || 'Connected'}
+              </span>
+              <button
+                onClick={() => handleLogin(null)}
+                className="text-sm text-red-500 hover:text-red-700"
+              >
+                Logout
+              </button>
+            </>
           ) : (
             <span className="text-red-500">Connecting...</span>
           )}
