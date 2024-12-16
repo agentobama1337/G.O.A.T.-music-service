@@ -41,7 +41,7 @@ const AlbumView = ({ browseId, onBackClick, onTrackSelect, api }) => {
     }
   }, [browseId, api]);
 
-  const handleTrackSelect = (track, index) => {
+  const handleTrackSelect = (track) => {
     // Передаем только треки из текущего альбома
     onTrackSelect(track, albumTracks);
   };
@@ -107,6 +107,11 @@ const AlbumView = ({ browseId, onBackClick, onTrackSelect, api }) => {
                 {track.artists?.map(artist => artist.name).join(', ')}
               </div>
             </div>
+            {track.isExplicit && (
+                    <span className="px-2 py-1 text-xs bg-gray-200 rounded mr-2">
+                      E
+                    </span>
+                  )}
             <div className="text-sm text-gray-500">
               {track.duration || '0:00'}
             </div>

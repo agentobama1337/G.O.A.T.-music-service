@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Loader } from 'lucide-react';
 import AlbumView from './AlbumView';
 import ArtistView from './ArtistView';
 import SearchWithSuggestions from './SearchWithSuggestions';
 import AuthComponent from './AuthComponent';
+import MusicPlayer from './MusicPlayer';
 import axios from 'axios';
 
 const api = axios.create({
@@ -243,7 +243,7 @@ const MusicApp = () => {
           {isLoggedIn ? (
             <>
               <span className="text-green-500 mr-2">
-                {userData?.email || 'Connected'}
+                {userData?.username || 'Connected'}
               </span>
               <button
                 onClick={() => handleLogin(null)}
@@ -272,6 +272,46 @@ const MusicApp = () => {
         
         {searchResults.length > 0 && (
           <div className="space-y-6">
+            {/* Songs Section */}
+            {searchResults[0].songs && searchResults[0].songs.length > 0 && (
+              <div>
+                <h3 className="text-xl font-semibold mb-3">Songs</h3>
+                <div className="space-y-2">
+                  {searchResults[0].songs.map((song, index) => song && (
+                    <div
+                      key={song.videoId || index}
+                      onClick={() => handlePlayTrack(song, searchResults[0].songs)}
+                      className="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 cursor-pointer"
+                    >
+                      {console.log(song)}
+                      {getThumbnailUrl(song) && (
+                        <img
+                          src={getThumbnailUrl(song)}
+                          alt={song.title || 'Song thumbnail'}
+                          className="w-12 h-12 rounded"
+                        />
+                      )}
+                      <div className="ml-3">
+                        <div className="font-semibold">{song.title || 'Unknown Title'}</div>
+                        <div className="text-sm text-gray-600">{song.type}</div>
+                      </div>
+                      {song.type === 'Single' && (
+                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-200 rounded">
+                          Single
+                        </span>
+                      )}
+                      {song.isExplicit && (
+                        <span className="px-2 py-1 text-xs bg-gray-200 rounded ml-2">
+                          E
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
             {/* Albums Section */}
             {searchResults[0].albums && searchResults[0].albums.length > 0 && (
               <div>
@@ -300,38 +340,6 @@ const MusicApp = () => {
               </div>
             )}
   
-            {/* Songs Section */}
-            {searchResults[0].songs && searchResults[0].songs.length > 0 && (
-              <div>
-                <h3 className="text-xl font-semibold mb-3">Songs</h3>
-                <div className="space-y-2">
-                  {searchResults[0].songs.map((song, index) => song && (
-                    <div
-                      key={song.videoId || index}
-                      onClick={() => handlePlayTrack(song, searchResults[0].songs)}
-                      className="flex items-center p-3 bg-white rounded-lg hover:bg-gray-50 cursor-pointer"
-                    >
-                      {getThumbnailUrl(song) && (
-                        <img
-                          src={getThumbnailUrl(song)}
-                          alt={song.title || 'Song thumbnail'}
-                          className="w-12 h-12 rounded"
-                        />
-                      )}
-                      <div className="ml-3">
-                        <div className="font-semibold">{song.title || 'Unknown Title'}</div>
-                        <div className="text-sm text-gray-600">{song.type}</div>
-                      </div>
-                      {song.type === 'Single' && (
-                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-200 rounded">
-                          Single
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
   
             {/* Artists Section */}
             {searchResults[0].artists && searchResults[0].artists.length > 0 && (
@@ -389,112 +397,23 @@ const MusicApp = () => {
     
     
 
-    <div className="bg-white border-t p-4">
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
-          <div className="flex items-center w-1/4">
-            {currentTrack && (
-              <>
-                {getThumbnailUrl(currentTrack) && (
-                  <img
-                    src={getThumbnailUrl(currentTrack)}
-                    alt={currentTrack.title || 'Current track'}
-                    className="w-12 h-12 rounded"
-                  />
-                )}
-                <div className="ml-3">
-                  <div className="font-semibold">{currentTrack.title || 'Unknown Title'}</div>
-                  <div className="text-sm text-gray-600">
-                    {getArtistNames(currentTrack)}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center justify-center w-2/4">
-            <button 
-              className="p-2 hover:bg-gray-100 rounded-full"
-              onClick={handlePrevTrack}
-              disabled={playlist.length === 0}
-            >
-              <SkipBack size={20} className={playlist.length === 0 ? 'text-gray-300' : 'text-gray-600'} />
-            </button>
-            <button
-              className="p-3 mx-4 bg-gray-100 hover:bg-gray-200 rounded-full"
-              onClick={togglePlayPause}
-              disabled={isLoading || !currentTrack}
-            >
-              {isLoading ? (
-                <Loader size={24} className="animate-spin" />
-              ) : isPlaying ? (
-                <Pause size={24} />
-              ) : (
-                <Play size={24} />
-              )}
-            </button>
-            <button 
-              className="p-2 hover:bg-gray-100 rounded-full"
-              onClick={handleNextTrack}
-              disabled={playlist.length === 0}
-            >
-              <SkipForward size={20} className={playlist.length === 0 ? 'text-gray-300' : 'text-gray-600'} />
-            </button>
-          </div>
-
-          <div className="flex items-center w-1/4 justify-end">
-            <Volume2 size={20} className="text-gray-600" />
-            <input
-              type="range"
-              className="ml-2 w-24"
-              min="0"
-              max="100"
-              defaultValue="50"
-              onChange={(e) => {
-                if (audioRef.current) {
-                  audioRef.current.volume = e.target.value / 100;
-                }
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="mt-2 max-w-4xl mx-auto">
-          <div className="relative pt-1">
-            <div className="flex mb-2 items-center justify-between">
-              <div className="text-xs text-gray-500">
-                {formatDuration(currentTime)}
-              </div>
-              <div className="text-xs text-gray-500">
-                {currentTrack?.duration || '0:00'}
-              </div>
-            </div>
-            <div 
-              ref={progressRef}
-              className="flex h-2 bg-gray-200 rounded cursor-pointer"
-              onClick={handleProgressClick}
-              onMouseDown={(e) => {
-                const handleMouseMove = (e) => handleProgressDrag(e);
-                const handleMouseUp = () => {
-                  document.removeEventListener('mousemove', handleMouseMove);
-                  document.removeEventListener('mouseup', handleMouseUp);
-                };
-                
-                document.addEventListener('mousemove', handleMouseMove);
-                document.addEventListener('mouseup', handleMouseUp);
-                
-                handleProgressDrag(e);
-              }}
-            >
-              <div
-                style={{
-                  width: `${currentTrack ? (currentTime / (currentTrack.duration_seconds || 1)) * 100 : 0}%`
-                }}
-                className="bg-blue-500 rounded"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+    <MusicPlayer
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        isLoading={isLoading}
+        playlist={playlist}
+        currentTime={currentTime}
+        audioRef={audioRef}
+        progressRef={progressRef}
+        togglePlayPause={togglePlayPause}
+        handlePrevTrack={handlePrevTrack}
+        handleNextTrack={handleNextTrack}
+        handleProgressClick={handleProgressClick}
+        handleProgressDrag={handleProgressDrag}
+        getThumbnailUrl={getThumbnailUrl}
+        getArtistNames={getArtistNames}
+        formatDuration={formatDuration}
+      />
 
       <audio
         ref={audioRef}

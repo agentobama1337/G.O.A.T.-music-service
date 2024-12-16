@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { X } from 'lucide-react';
 
-const AuthComponent = ({ onLogin, api }) => {
+const AuthComponent = memo(function AuthComponent({ onLogin, api }) {
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,13 +41,13 @@ const AuthComponent = ({ onLogin, api }) => {
           // Save auth data to localStorage
           localStorage.setItem('authToken', data.token);
           localStorage.setItem('userData', JSON.stringify({
-            email: formData.email,
-            // Add any other user data you want to store
+            username: data.user.username, // Assuming the backend returns username
+            email: formData.email
           }));
 
           onLogin(data.token, {
-            email: formData.email,
-            // Add any other user data you want to pass
+            username: data.username,
+            email: formData.email
           });
           dialogRef.current.close();
         } else {
@@ -72,15 +72,13 @@ const AuthComponent = ({ onLogin, api }) => {
             // Save auth data to localStorage
             localStorage.setItem('authToken', loginResponse.data.token);
             localStorage.setItem('userData', JSON.stringify({
-              email: formData.email,
               username: formData.username,
-              // Add any other user data you want to store
+              email: formData.email
             }));
 
             onLogin(loginResponse.data.token, {
-              email: formData.email,
               username: formData.username,
-              // Add any other user data you want to pass
+              email: formData.email
             });
             dialogRef.current.close();
           }
@@ -203,6 +201,6 @@ const AuthComponent = ({ onLogin, api }) => {
       </div>
     </dialog>
   );
-};
+});
 
 export default AuthComponent;

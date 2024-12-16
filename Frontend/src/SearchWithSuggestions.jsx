@@ -46,7 +46,10 @@ const SearchWithSuggestions = ({ onSearch, isDisabled, api }) => {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    searchTimeoutRef.current = setTimeout(fetchSuggestions, 300);
+    // Only fetch suggestions if the query is changing naturally
+    if (!searchTimeoutRef.current) {
+      searchTimeoutRef.current = setTimeout(fetchSuggestions, 300);
+    }
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -56,9 +59,25 @@ const SearchWithSuggestions = ({ onSearch, isDisabled, api }) => {
   }, [searchQuery, api]);
 
   const handleSuggestionClick = (suggestion) => {
+    // Directly set the query 
     setSearchQuery(suggestion);
     setShowSuggestions(false);
-    onSearch({ target: { value: suggestion } });
+    
+    // Simulate a search event with the suggestion
+    const searchEvent = { 
+      target: { 
+        value: suggestion 
+      } 
+    };
+    onSearch(searchEvent);
+  };
+
+  const handleInputChange = (e) => {
+    // Reset the timeout flag when manually typing
+    searchTimeoutRef.current = null;
+    
+    setSearchQuery(e.target.value);
+    onSearch(e);
   };
 
   return (
@@ -66,10 +85,7 @@ const SearchWithSuggestions = ({ onSearch, isDisabled, api }) => {
       <input
         type="text"
         value={searchQuery}
-        onChange={(e) => {
-          setSearchQuery(e.target.value);
-          onSearch(e);
-        }}
+        onChange={handleInputChange}
         onFocus={() => setShowSuggestions(suggestions.length > 0)}
         placeholder="Search for songs, artists, or albums..."
         className="w-full p-2 pl-10 pr-4 border rounded-lg focus:outline-none focus:border-blue-500"
